@@ -1,0 +1,55 @@
+# Система аутентификации и авторизации
+
+## Схема разграничения прав доступа
+
+### Таблицы БД
+
+#### users (пользователи)
+- id
+- email (уникальный)
+- password_hash
+- first_name, last_name, patronymic
+- is_active (мягкое удаление)
+- created_at, updated_at
+
+#### roles (роли)
+- id
+- name (admin, manager, user, guest)
+- description
+
+#### user_roles (связь пользователей с ролями)
+- user_id
+- role_id
+
+#### resources (ресурсы системы)
+- id
+- name (users, products, orders, access_rules)
+- description
+
+#### access_rules (правила доступа)
+- id
+- role_id
+- resource_id
+- can_create (bool)
+- can_read_own (bool)      — только свои объекты
+- can_read_all (bool)      — все объекты
+- can_update_own (bool)
+- can_update_all (bool)
+- can_delete_own (bool)
+- can_delete_all (bool)
+
+### Принцип работы
+
+1. Пользователь аутентифицируется по email+паролю, получает JWT-токен
+2. При каждом запросе middleware извлекает токен из заголовка Authorization: Bearer <token>
+3. По токену определяется user_id и загружается пользователь + его роли
+4. Для доступа к ресурсу проверяется:
+   - Есть ли у любой из ролей пользователя правило для данного ресурса
+   - Какое действие (create/read/update/delete)
+   - Если требуется доступ к чужим объектам — нужны права с *_all
+5. Ответы:
+   - 401 — нет токена или токен невалидный
+   - 403 — токен есть, но прав недостаточно
+   - 200 — доступ разрешен
+
+
