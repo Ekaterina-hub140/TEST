@@ -1,55 +1,45 @@
-# Система аутентификации и авторизации
+# 🔐 Auth System — JWT Authentication & RBAC
 
-## Схема разграничения прав доступа
+[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
+[![Django](https://img.shields.io/badge/Django-4.2-green.svg)](https://djangoproject.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-### Таблицы БД
+Система аутентификации и авторизации с **JWT-токенами** и **ролевой моделью доступа (RBAC)**.  
+Реализована полностью с нуля без использования встроенных механизмов Django.
 
-#### users (пользователи)
-- id
-- email (уникальный)
-- password_hash
-- first_name, last_name, patronymic
-- is_active (мягкое удаление)
-- created_at, updated_at
+## ✨ Возможности
 
-#### roles (роли)
-- id
-- name (admin, manager, user, guest)
-- description
+- ✅ Регистрация, логин, обновление профиля, мягкое удаление аккаунта
+- ✅ JWT-аутентификация через кастомный middleware
+- ✅ Ролевая модель (Admin, Manager, User, Guest)
+- ✅ 7 типов прав на каждую пару (роль, ресурс)
+- ✅ Разделение доступа на "свои" и "чужие" объекты
+- ✅ API для администратора (CRUD правил доступа)
+- ✅ Mock-ресурсы для демонстрации 401/403
+- ✅ Docker-контейнеризация
+- ✅ Тесты (pytest + coverage)
 
-#### user_roles (связь пользователей с ролями)
-- user_id
-- role_id
+## 🚀 Быстрый старт
 
-#### resources (ресурсы системы)
-- id
-- name (users, products, orders, access_rules)
-- description
+### С использованием Docker (рекомендуется)
 
-#### access_rules (правила доступа)
-- id
-- role_id
-- resource_id
-- can_create (bool)
-- can_read_own (bool)      — только свои объекты
-- can_read_all (bool)      — все объекты
-- can_update_own (bool)
-- can_update_all (bool)
-- can_delete_own (bool)
-- can_delete_all (bool)
+```bash
+# Клонировать репозиторий
+git clone https://github.com/yourusername/auth-system.git
+cd auth-system
 
-### Принцип работы
+# Скопировать переменные окружения
+cp .env.example .env
 
-1. Пользователь аутентифицируется по email+паролю, получает JWT-токен
-2. При каждом запросе middleware извлекает токен из заголовка Authorization: Bearer <token>
-3. По токену определяется user_id и загружается пользователь + его роли
-4. Для доступа к ресурсу проверяется:
-   - Есть ли у любой из ролей пользователя правило для данного ресурса
-   - Какое действие (create/read/update/delete)
-   - Если требуется доступ к чужим объектам — нужны права с *_all
-5. Ответы:
-   - 401 — нет токена или токен невалидный
-   - 403 — токен есть, но прав недостаточно
-   - 200 — доступ разрешен
+# Запустить контейнеры
+docker-compose up --build
 
+# В другом терминале загрузить тестовые данные
+docker-compose exec web python manage.py init_data
 
+## Безопасность
+
+- Пароли хешируются с помощью bcrypt
+- JWT токены имеют срок действия
+- Секретные ключи хранятся в `.env` (не в коде)
+- Docker образ сканируется на уязвимости (предупреждения связаны с базовым образом Python, не с кодом приложения)

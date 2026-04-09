@@ -7,13 +7,26 @@ venv/
 env/
 .env
 
-# Django
-*.log
+# Database
+*.sqlite3
 db.sqlite3
-.DS_Store
+
+# Docker
+.docker/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

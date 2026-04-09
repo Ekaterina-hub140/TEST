@@ -1,11 +1,12 @@
-from django.shortcuts import render
 import jwt
-from datetime import datetime
+from datetime import datetime, timezone
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
+# Импорты из нашего проекта
+from .permissions import check_permission  # ← импортируем из permissions.py
 from .models import User, Role, UserRole, Resource, AccessRule
 from .serializers import (
     UserSerializer, RegisterSerializer, 
@@ -60,12 +61,12 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        # Генерируем JWT токен
+        # Генерируем JWT токен (исправлено: datetime.now(timezone.utc))
         payload = {
             'user_id': user.id,
             'email': user.email,
-            'exp': datetime.utcnow() + settings.JWT_EXPIRATION_DELTA,
-            'iat': datetime.utcnow()
+            'exp': datetime.now(timezone.utc) + settings.JWT_EXPIRATION_DELTA,
+            'iat': datetime.now(timezone.utc)
         }
         token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
         
@@ -79,19 +80,18 @@ class LoginView(APIView):
 class LogoutView(APIView):
     """Выход из системы (на клиенте нужно удалить токен)"""
     def post(self, request):
-        # В JWT нет серверной стороны выхода, клиент сам удаляет токен
         return Response({'message': 'Выход выполнен. Удалите токен на клиенте'})
 
 
 class ProfileView(APIView):
     """Получение и обновление профиля"""
     def get(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(UserSerializer(request.user).data)
     
     def put(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         serializer = UserSerializer(request.user, data=request.data, partial=True)
@@ -104,7 +104,7 @@ class ProfileView(APIView):
 class DeleteAccountView(APIView):
     """Мягкое удаление аккаунта (is_active = False)"""
     def post(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         request.user.is_active = False
@@ -112,56 +112,14 @@ class DeleteAccountView(APIView):
         return Response({'message': 'Аккаунт деактивирован'})
 
 
-# ========== 2. Проверка прав доступа (вспомогательная функция) ==========
-
-def check_permission(user, resource_name, action, is_own=False):
-    """
-    Проверяет, есть ли у пользователя доступ к ресурсу.
-    action может быть: 'create', 'read', 'update', 'delete'
-    """
-    if not user or not user.is_active:
-        return False
-    
-    # Получаем все роли пользователя
-    user_roles = UserRole.objects.filter(user=user).select_related('role')
-    
-    for ur in user_roles:
-        try:
-            resource = Resource.objects.get(name=resource_name)
-            rule = AccessRule.objects.get(role=ur.role, resource=resource)
-            
-            if action == 'create' and rule.can_create:
-                return True
-            elif action == 'read':
-                if is_own and rule.can_read_own:
-                    return True
-                if rule.can_read_all:
-                    return True
-            elif action == 'update':
-                if is_own and rule.can_update_own:
-                    return True
-                if rule.can_update_all:
-                    return True
-            elif action == 'delete':
-                if is_own and rule.can_delete_own:
-                    return True
-                if rule.can_delete_all:
-                    return True
-        except (Resource.DoesNotExist, AccessRule.DoesNotExist):
-            continue
-    
-    return False
-
-
-# ========== 3. Mock-ресурсы для демонстрации прав ==========
+# ========== 2. Mock-ресурсы для демонстрации прав ==========
 
 class MockProductsView(APIView):
     """Вымышленный ресурс 'products' для проверки прав"""
     def get(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
-        # Проверяем доступ на чтение (указываем is_own=False, т.к. запрашиваем все товары)
         if check_permission(request.user, 'products', 'read', is_own=False):
             return Response({
                 'message': 'Доступ к товарам разрешен',
@@ -176,7 +134,7 @@ class MockProductsView(APIView):
         )
     
     def post(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if check_permission(request.user, 'products', 'create'):
@@ -187,10 +145,9 @@ class MockProductsView(APIView):
 class MockOrdersView(APIView):
     """Вымышленный ресурс 'orders' для проверки прав с разделением на 'свои' и 'чужие'"""
     def get(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
-        # Для демонстрации: считаем заказы пользователя 'своими' по email
         is_own = request.query_params.get('own', 'false').lower() == 'true'
         
         if check_permission(request.user, 'orders', 'read', is_own=is_own):
@@ -209,12 +166,12 @@ class MockOrdersView(APIView):
         return Response({'error': 'Доступ запрещен'}, status=status.HTTP_403_FORBIDDEN)
 
 
-# ========== 4. API для администратора (управление правилами доступа) ==========
+# ========== 3. API для администратора (управление правилами доступа) ==========
 
 class AdminRoleListView(APIView):
     """Список ролей (только для админов)"""
     def get(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'read'):
@@ -224,7 +181,7 @@ class AdminRoleListView(APIView):
         return Response(RoleSerializer(roles, many=True).data)
     
     def post(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'create'):
@@ -240,7 +197,7 @@ class AdminRoleListView(APIView):
 class AdminResourceListView(APIView):
     """Список ресурсов (только для админов)"""
     def get(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'read'):
@@ -250,7 +207,7 @@ class AdminResourceListView(APIView):
         return Response(ResourceSerializer(resources, many=True).data)
     
     def post(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'create'):
@@ -266,7 +223,7 @@ class AdminResourceListView(APIView):
 class AdminAccessRuleListView(APIView):
     """Управление правилами доступа"""
     def get(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'read'):
@@ -276,7 +233,7 @@ class AdminAccessRuleListView(APIView):
         return Response(AccessRuleSerializer(rules, many=True).data)
     
     def post(self, request):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'create'):
@@ -298,7 +255,7 @@ class AdminAccessRuleDetailView(APIView):
             return None
     
     def put(self, request, pk):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'update'):
@@ -315,7 +272,7 @@ class AdminAccessRuleDetailView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     def delete(self, request, pk):
-        if not request.user:
+        if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         
         if not check_permission(request.user, 'access_rules', 'delete'):
@@ -327,4 +284,3 @@ class AdminAccessRuleDetailView(APIView):
         
         rule.delete()
         return Response({'message': 'Правило удалено'})
-
