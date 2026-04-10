@@ -1,45 +1,116 @@
-# 🔐 Auth System — JWT Authentication & RBAC
+# 🔐 Auth System — система аутентификации и авторизации
 
-[![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
-[![Django](https://img.shields.io/badge/Django-4.2-green.svg)](https://djangoproject.com)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+## О проекте
 
-Система аутентификации и авторизации с **JWT-токенами** и **ролевой моделью доступа (RBAC)**.  
-Реализована полностью с нуля без использования встроенных механизмов Django.
+Это полностью кастомная система аутентификации и разграничения прав доступа, 
+разработанная без использования встроенных механизмов Django. 
 
-## ✨ Возможности
+Проект демонстрирует понимание:
+- Принципов аутентификации (JWT, токены, middleware)
+- Авторизации (RBAC, ролевые модели, права доступа)
+- Безопасности (хеширование bcrypt, .env секреты)
+- Архитектуры (разделение на views/permissions/services)
 
-- ✅ Регистрация, логин, обновление профиля, мягкое удаление аккаунта
-- ✅ JWT-аутентификация через кастомный middleware
-- ✅ Ролевая модель (Admin, Manager, User, Guest)
-- ✅ 7 типов прав на каждую пару (роль, ресурс)
-- ✅ Разделение доступа на "свои" и "чужие" объекты
-- ✅ API для администратора (CRUD правил доступа)
-- ✅ Mock-ресурсы для демонстрации 401/403
-- ✅ Docker-контейнеризация
-- ✅ Тесты (pytest + coverage)
+## 🚀 Функциональность
 
-## 🚀 Быстрый старт
+### Пользовательская часть
+- Регистрация (email, пароль, имя, фамилия, отчество)
+- JWT-логин (токен возвращается при успешном входе)
+- Просмотр и обновление профиля
+- Мягкое удаление аккаунта
 
-### С использованием Docker (рекомендуется)
+### Система прав доступа (RBAC)
+- 4 роли: Admin, Manager, User, Guest
+- 3 ресурса: products, orders, access_rules
+- 7 типов прав на каждую пару (роль, ресурс):
+  - create — создание
+  - read_own / read_all — чтение своих / всех
+  - update_own / update_all — изменение своих / всех
+  - delete_own / delete_all — удаление своих / всех
+
+### Административная часть
+- Управление ролями (создание, просмотр)
+- Управление ресурсами
+- CRUD правил доступа
+
+### Демонстрационные mock-ресурсы
+- /api/mock/products/ — проверка прав на чтение товаров
+- /api/mock/orders/?own=true/false — проверка доступа к своим/чужим заказам
+
+### Безопасность
+- Пароли хешируются bcrypt
+- JWT токены с ограниченным сроком действия (24 часа)
+- Секретные ключи в .env (не в коде)
+
+## 🛠 Технологии
+
+| Технология | Назначение |
+|------------|------------|
+| Django 6.0 | Web-фреймворк |
+| DRF | API |
+| PyJWT | JWT токены |
+| bcrypt | Хеширование паролей |
+| python-dotenv | Переменные окружения |
+| Docker | Контейнеризация |
+| pytest | Тестирование |
+| PostgreSQL/SQLite | Базы данных |
+
+## 📁 Архитектура
+auth_system/
+├── core/ # Настройки проекта
+├── auth_app/
+│ ├── models.py # Пользователи, роли, права
+│ ├── views.py # API endpoints
+│ ├── middleware.py # JWT-аутентификация
+│ ├── permissions.py # Проверка прав
+│ ├── services.py # Бизнес-логика
+│ ├── serializers.py # Сериализаторы
+│ ├── tests/ # Тесты
+│ └── management/commands/ # Команда init_data
+├── .env.example # Шаблон переменных окружения
+├── Dockerfile # Docker-образ
+├── docker-compose.yml # Docker Compose
+└── README.md
+
+
+## 🧪 Тестирование
 
 ```bash
-# Клонировать репозиторий
-git clone https://github.com/yourusername/auth-system.git
+python manage.py test
+
+Покрытие: регистрация, логин, проверка прав, 401/403 ошибки.
+
+📦 Установка и запуск
+Локально (рекомендуется)
+git clone https://github.com/ваш_ник/auth-system.git
 cd auth-system
 
-# Скопировать переменные окружения
-cp .env.example .env
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Запустить контейнеры
+pip install -r requirements.txt
+
+cp .env.example .env
+# Отредактируйте .env (секретные ключи)
+
+python manage.py migrate
+python manage.py init_data
+python manage.py runserver
+
+Docker
 docker-compose up --build
 
-# В другом терминале загрузить тестовые данные
-docker-compose exec web python manage.py init_data
+👤 Тестовые пользователи
+После python manage.py init_data:
 
-## Безопасность
+Email	            Пароль	              Роль
+admin@test.com	   admin123	        Администратор
+manager@test.com	manager123	    Менеджер
+user@test.com	    user123	        Пользователь
+guest@test.com	    guest123	    Гость
+📬 Контакты
+GitHub: Ekaterina-hub140
 
-- Пароли хешируются с помощью bcrypt
-- JWT токены имеют срок действия
-- Секретные ключи хранятся в `.env` (не в коде)
-- Docker образ сканируется на уязвимости (предупреждения связаны с базовым образом Python, не с кодом приложения)
+Email: kate-20@yandex.com
+
+⭐️ Если понравился проект, поставьте звезду!
