@@ -4,8 +4,9 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.db import models
 
-# Импорты из нашего проекта
+
 from .permissions import check_permission  # ← импортируем из permissions.py
 from .models import User, Role, UserRole, Resource, AccessRule
 from .serializers import (
@@ -61,7 +62,7 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        # Генерируем JWT токен (исправлено: datetime.now(timezone.utc))
+        # Генерируем JWT токен 
         payload = {
             'user_id': user.id,
             'email': user.email,

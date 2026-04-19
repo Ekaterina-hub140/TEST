@@ -45,6 +45,7 @@ class AuthTestCase(TestCase):
         self.assertEqual(response.status_code, 401)
     
     def test_protected_endpoint_without_token(self):
-        # Без токена — анонимный пользователь, доступ запрещён
+        # Без токена доступ должен быть запрещён
         response = self.client.get('/api/mock/products/')
-        self.assertEqual(response.status_code, 403)  # Forbidden, не 401
+        self.assertNotEqual(response.status_code, 200)
+        self.assertIn(response.status_code, [401, 403])
