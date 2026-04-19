@@ -1,118 +1,254 @@
 # 🔐 Auth System — система аутентификации и авторизации
+
 [![CI/CD Pipeline](https://github.com/Ekaterina-hub140/TEST/actions/workflows/ci.yml/badge.svg)](https://github.com/Ekaterina-hub140/TEST/actions/workflows/ci.yml)
-## О проекте
+[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://python.org)
+[![Django](https://img.shields.io/badge/Django-6.0-green.svg)](https://djangoproject.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Это полностью кастомная система аутентификации и разграничения прав доступа, 
-разработанная без использования встроенных механизмов Django. 
+## 📖 О проекте
 
-Проект демонстрирует понимание:
-- Принципов аутентификации (JWT, токены, middleware)
-- Авторизации (RBAC, ролевые модели, права доступа)
-- Безопасности (хеширование bcrypt, .env секреты)
-- Архитектуры (разделение на views/permissions/services)
+**Полностью кастомная** система аутентификации и разграничения прав доступа, разработанная без использования встроенных механизмов Django.
+
+Проект демонстрирует глубокое понимание:
+- **Аутентификации** — JWT, refresh-токены, кастомный middleware
+- **Авторизации** — RBAC, ролевая модель, 7 типов прав
+- **Безопасности** — bcrypt хеширование, переменные окружения, rate limiting (в плане)
+- **Архитектуры** — разделение на views/permissions/services, чистая архитектура
+- **DevOps** — Docker, CI/CD (GitHub Actions), Swagger документация
+
+---
 
 ## 🚀 Функциональность
 
-### Пользовательская часть
+### 🔐 Аутентификация
 - Регистрация (email, пароль, имя, фамилия, отчество)
-- JWT-логин (токен возвращается при успешном входе)
+- JWT-логин (access + refresh токены)
+- Обновление access-токена через refresh-токен
+- Отзыв refresh-токена при logout
 - Просмотр и обновление профиля
 - Мягкое удаление аккаунта
 
-### Система прав доступа (RBAC)
-- 4 роли: Admin, Manager, User, Guest
-- 3 ресурса: products, orders, access_rules
-- 7 типов прав на каждую пару (роль, ресурс):
-  - create — создание
-  - read_own / read_all — чтение своих / всех
-  - update_own / update_all — изменение своих / всех
-  - delete_own / delete_all — удаление своих / всех
+### 🛡️ Система прав доступа (RBAC)
+- **4 роли:** Admin, Manager, User, Guest
+- **3 ресурса:** products, orders, access_rules
+- **7 типов прав** на каждую пару (роль, ресурс):
 
-### Административная часть
-- Управление ролями (создание, просмотр)
-- Управление ресурсами
-- CRUD правил доступа
+| Право | Описание |
+|-------|----------|
+| `create` | Создание новых объектов |
+| `read_own` | Чтение только своих объектов |
+| `read_all` | Чтение любых объектов |
+| `update_own` | Изменение своих объектов |
+| `update_all` | Изменение любых объектов |
+| `delete_own` | Удаление своих объектов |
+| `delete_all` | Удаление любых объектов |
 
-### Демонстрационные mock-ресурсы
-- /api/mock/products/ — проверка прав на чтение товаров
-- /api/mock/orders/?own=true/false — проверка доступа к своим/чужим заказам
+### 👑 Административная часть
+- Управление ролями (CRUD)
+- Управление ресурсами (CRUD)
+- Управление правилами доступа (CRUD)
 
-### Безопасность
-- Пароли хешируются bcrypt
-- JWT токены с ограниченным сроком действия (24 часа)
-- Секретные ключи в .env (не в коде)
+### 🎭 Демонстрационные mock-ресурсы
+- `GET /api/mock/products/` — проверка прав на чтение товаров
+- `POST /api/mock/products/` — проверка прав на создание
+- `GET /api/mock/orders/?own=true/false` — проверка доступа к своим/чужим заказам
+
+---
+
+## 🔄 Token Flow
+
+┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+│ Login │────▶│ Access │────▶│ Refresh │
+│ /api/login │ │ Token │ │ Token │
+└─────────────┘ └─────────────┘ └─────────────┘
+│ │
+▼ ▼
+┌─────────────┐ ┌─────────────┐
+│ API call │ │ /refresh │
+│ Bearer <token> │ get new │
+└─────────────┘ │ access_token│
+└─────────────┘
+
+1. `POST /api/login/` → `{access_token, refresh_token}`
+2. Используйте `access_token` в заголовке: `Authorization: Bearer <token>`
+3. При истечении access-токена: `POST /api/refresh/` → `{new_access_token}`
+4. `POST /api/logout/` отзывает refresh-токен
+
+---
 
 ## 🛠 Технологии
 
-| Технология | Назначение |
-|------------|------------|
-| Django 6.0 | Web-фреймворк |
-| DRF | API |
-| PyJWT | JWT токены |
-| bcrypt | Хеширование паролей |
-| python-dotenv | Переменные окружения |
-| Docker | Контейнеризация |
-| pytest | Тестирование |
-| SQLite | Базы данных |
+| Категория | Технологии |
+|-----------|------------|
+| **Backend** | Django 6.0, Django REST Framework |
+| **Auth** | PyJWT, bcrypt, refresh tokens |
+| **Database** | SQLite (dev), PostgreSQL (production-ready) |
+| **DevOps** | Docker, docker-compose, GitHub Actions |
+| **Documentation** | Swagger/OpenAPI (drf-spectacular) |
+| **Testing** | pytest, pytest-cov, pytest-xdist |
+| **Code Quality** | black, flake8, isort, mypy |
 
-## 📁 Архитектура
+---
+
+## 📁 Архитектура проекта
 auth_system/
 ├── core/ # Настройки проекта
-├── auth_app/
-│ ├── models.py # Пользователи, роли, права
+│ ├── settings.py
+│ ├── urls.py
+│ └── wsgi.py
+├── auth_app/ # Основное приложение
+│ ├── models.py # Пользователи, роли, права, refresh-токены
 │ ├── views.py # API endpoints
 │ ├── middleware.py # JWT-аутентификация
-│ ├── permissions.py # Проверка прав
-│ ├── services.py # Бизнес-логика
+│ ├── permissions.py # Проверка прав доступа
+│ ├── services.py # Бизнес-логика (токены, пользователи)
 │ ├── serializers.py # Сериализаторы
+│ ├── urls.py # Маршруты приложения
 │ ├── tests/ # Тесты
 │ └── management/commands/ # Команда init_data
 ├── .env.example # Шаблон переменных окружения
+├── .github/workflows/ # CI/CD конфигурация
 ├── Dockerfile # Docker-образ
 ├── docker-compose.yml # Docker Compose
+├── requirements.txt # Production зависимости
+├── requirements.dev.txt # Development зависимости
 └── README.md
 
+---
 
-## 🧪 Тестирование
+## 📚 API Документация
+
+После запуска доступна автоматическая документация:
+
+- **Swagger UI:** `/api/docs/` — интерактивная документация
+- **ReDoc:** `/api/redoc/` — альтернативный просмотр
+- **OpenAPI Schema:** `/api/schema/` — JSON схема
+
+### Основные endpoints
+
+| Метод | URL | Описание |
+|-------|-----|----------|
+| POST | `/api/register/` | Регистрация |
+| POST | `/api/login/` | Вход (access + refresh) |
+| POST | `/api/refresh/` | Обновление access-токена |
+| POST | `/api/logout/` | Выход (отзыв refresh) |
+| GET/PUT | `/api/profile/` | Профиль |
+| POST | `/api/delete-account/` | Мягкое удаление |
+
+### Административные endpoints (требуют роль admin)
+
+| Метод | URL | Описание |
+|-------|-----|----------|
+| GET/POST | `/api/admin/roles/` | Управление ролями |
+| GET/POST | `/api/admin/resources/` | Управление ресурсами |
+| GET/POST | `/api/admin/access-rules/` | Управление правилами |
+| PUT/DELETE | `/api/admin/access-rules/<id>/` | Изменение/удаление правила |
+
+---
+
+## 🚀 Быстрый старт
+
+### 📦 Локальная установка
 
 ```bash
-python manage.py test
+# Клонировать репозиторий
+git clone https://github.com/Ekaterina-hub140/TEST.git
+cd TEST
 
-Покрытие: регистрация, логин, проверка прав, 401/403 ошибки.
-
-📦 Установка и запуск
-Локально (рекомендуется)
-git clone https://github.com/ваш_ник/auth-system.git
-cd auth-system
-
+# Создать виртуальное окружение
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
+# Установить зависимости
 pip install -r requirements.txt
 
+# Настроить переменные окружения
 cp .env.example .env
 # Отредактируйте .env (секретные ключи)
 
+# Применить миграции
 python manage.py migrate
+
+# Загрузить тестовые данные
 python manage.py init_data
+
+# Запустить сервер
 python manage.py runserver
 
-Docker
+🐳 Docker (production-style)
+
 docker-compose up --build
 
+Тестирование и качество кода
+bash
+# Запуск тестов
+python manage.py test
+
+# Запуск тестов с покрытием
+pytest --cov=auth_app
+
+# Форматирование кода
+black auth_app/
+isort auth_app/
+
+# Линтинг
+flake8 auth_app/
+
+# Проверка типов
+mypy auth_app/
+
+# Установка development зависимостей
+pip install -r requirements.dev.txt
 👤 Тестовые пользователи
 После python manage.py init_data:
 
-Email	            Пароль	              Роль
-admin@test.com	   admin123	        Администратор
-manager@test.com	manager123	    Менеджер
-user@test.com	    user123	        Пользователь
-guest@test.com	    guest123	    Гость
+Email	             Пароль	       Роль	       Доступ
+admin@test.com	   admin123	     Admin	     Полный доступ
+manager@test.com	 manager123	   Manager	   Управление товарами, просмотр заказов
+user@test.com	     user123	     User	       Только свои заказы
+guest@test.com	   guest123	     Guest	     Только чтение товаров
 
+🔐 Безопасность
+✅ Пароли хешируются с помощью bcrypt
+
+✅ JWT access-токены живут 24 часа
+
+✅ Refresh-токены живут 7 дней, хранятся в БД, могут быть отозваны
+
+✅ Секретные ключи в .env (не в коде)
+
+✅ Rate limiting (в плане)
+
+✅ Логирование (в плане)
+
+📊 Roadmap
+JWT аутентификация
+
+Refresh-токены
+
+RBAC с 7 типами прав
+
+Swagger/OpenAPI документация
+
+Docker + CI/CD
+
+Rate limiting (django-ratelimit)
+
+Кеширование прав через Redis
+
+Логирование действий
+
+Health-check endpoint
+
+Асинхронная отправка email (Celery)
 
 📬 Контакты
 GitHub: Ekaterina-hub140
 
 Email: kate-20@yandex.com
 
-⭐️ Если понравился проект, поставьте звезду!
+⭐️ Благодарность
+Если проект оказался полезным, поставьте звезду — это помогает развиваться!
+
+📄 Лицензия
+MIT License — свободное использование, модификация и распространение.

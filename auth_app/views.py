@@ -4,10 +4,10 @@ from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.db import models
+from drf_spectacular.utils import extend_schema, OpenApiResponse
 
-
-from .permissions import check_permission  # ← импортируем из permissions.py
+from .permissions import check_permission
+from .services import TokenService
 from .models import User, Role, UserRole, Resource, AccessRule
 from .serializers import (
     UserSerializer, RegisterSerializer, 
@@ -17,6 +17,15 @@ from .serializers import (
 
 # ========== 1. Взаимодействие с пользователем ==========
 
+@extend_schema(
+    summary="Регистрация пользователя",
+    description="Создаёт нового пользователя с ролью 'user' по умолчанию",
+    request=RegisterSerializer,
+    responses={
+        201: UserSerializer,
+        400: OpenApiResponse(description="Ошибка валидации (пароли не совпадают, email уже существует)"),
+    }
+)
 class RegisterView(APIView):
     """Регистрация нового пользователя"""
     def post(self, request):
@@ -36,8 +45,33 @@ class RegisterView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Вход в систему",
+    description="Аутентификация по email и паролю. Возвращает access_token и refresh_token",
+    request={
+        "type": "object",
+        "properties": {
+            "email": {"type": "string", "format": "email", "example": "user@test.com"},
+            "password": {"type": "string", "format": "password", "example": "user123"},
+        },
+        "required": ["email", "password"]
+    },
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "access_token": {"type": "string"},
+                "refresh_token": {"type": "string"},
+                "user": {"type": "object"},
+            }
+        },
+        400: OpenApiResponse(description="Email и пароль обязательны"),
+        401: OpenApiResponse(description="Неверный email или пароль"),
+    }
+)
 class LoginView(APIView):
-    """Вход в систему, выдача JWT токена"""
+    """Вход в систему, выдача JWT токенов"""
     def post(self, request):
         email = request.data.get('email')
         password = request.data.get('password')
@@ -62,28 +96,102 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
         
-        # Генерируем JWT токен 
+        # Генерируем access JWT токен
         payload = {
-            'user_id': user.id,
+            'user_id': user.pk,
             'email': user.email,
             'exp': datetime.now(timezone.utc) + settings.JWT_EXPIRATION_DELTA,
             'iat': datetime.now(timezone.utc)
         }
-        token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        access_token = jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+        
+        # Генерируем refresh токен
+        refresh_token = TokenService.generate_refresh_token(user)
         
         return Response({
             'message': 'Успешный вход',
-            'token': token,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'user': UserSerializer(user).data
         })
 
 
-class LogoutView(APIView):
-    """Выход из системы (на клиенте нужно удалить токен)"""
+@extend_schema(
+    summary="Обновление access-токена",
+    description="Получение нового access-токена по refresh-токену",
+    request={
+        "type": "object",
+        "properties": {
+            "refresh_token": {"type": "string", "example": "eyJhbGciOiJIUzI1NiIs..."},
+        },
+        "required": ["refresh_token"]
+    },
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "access_token": {"type": "string"},
+            }
+        },
+        401: OpenApiResponse(description="Невалидный или просроченный refresh токен"),
+    }
+)
+class RefreshTokenView(APIView):
+    """Обновление access-токена"""
     def post(self, request):
-        return Response({'message': 'Выход выполнен. Удалите токен на клиенте'})
+        refresh_token_str = request.data.get('refresh_token')
+        
+        if not refresh_token_str:
+            return Response(
+                {'error': 'Refresh token required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        access_token, error = TokenService.refresh_access_token(refresh_token_str)
+        
+        if error:
+            return Response(
+                {'error': error},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        return Response({
+            'access_token': access_token
+        })
 
 
+@extend_schema(
+    summary="Выход из системы",
+    description="Отзыв refresh-токена. Access-токен удаляется на клиенте.",
+    request={
+        "type": "object",
+        "properties": {
+            "refresh_token": {"type": "string"},
+        }
+    },
+    responses={
+        200: OpenApiResponse(description="Выход выполнен"),
+    }
+)
+class LogoutView(APIView):
+    """Выход из системы (отзыв refresh-токена)"""
+    def post(self, request):
+        refresh_token_str = request.data.get('refresh_token')
+        
+        if refresh_token_str:
+            TokenService.revoke_refresh_token(refresh_token_str)
+        
+        return Response({'message': 'Выход выполнен. Refresh токен отозван.'})
+
+
+@extend_schema(
+    summary="Получение профиля",
+    description="Возвращает информацию о текущем пользователе",
+    responses={
+        200: UserSerializer,
+        401: OpenApiResponse(description="Не авторизован"),
+    }
+)
 class ProfileView(APIView):
     """Получение и обновление профиля"""
     def get(self, request):
@@ -91,6 +199,16 @@ class ProfileView(APIView):
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
         return Response(UserSerializer(request.user).data)
     
+    @extend_schema(
+        summary="Обновление профиля",
+        description="Частичное обновление данных пользователя",
+        request=UserSerializer,
+        responses={
+            200: UserSerializer,
+            401: OpenApiResponse(description="Не авторизован"),
+            400: OpenApiResponse(description="Ошибка валидации"),
+        }
+    )
     def put(self, request):
         if not request.user or not request.user.is_active:
             return Response({'error': 'Не авторизован'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -102,6 +220,14 @@ class ProfileView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@extend_schema(
+    summary="Мягкое удаление аккаунта",
+    description="Деактивирует аккаунт (is_active=False). Пользователь больше не может войти.",
+    responses={
+        200: OpenApiResponse(description="Аккаунт деактивирован"),
+        401: OpenApiResponse(description="Не авторизован"),
+    }
+)
 class DeleteAccountView(APIView):
     """Мягкое удаление аккаунта (is_active = False)"""
     def post(self, request):
@@ -115,6 +241,21 @@ class DeleteAccountView(APIView):
 
 # ========== 2. Mock-ресурсы для демонстрации прав ==========
 
+@extend_schema(
+    summary="Товары (mock)",
+    description="Демонстрация прав доступа к ресурсу 'products'",
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "products": {"type": "array"},
+            }
+        },
+        401: OpenApiResponse(description="Не авторизован"),
+        403: OpenApiResponse(description="Доступ запрещён"),
+    }
+)
 class MockProductsView(APIView):
     """Вымышленный ресурс 'products' для проверки прав"""
     def get(self, request):
@@ -143,6 +284,30 @@ class MockProductsView(APIView):
         return Response({'error': 'Нет прав на создание товаров'}, status=status.HTTP_403_FORBIDDEN)
 
 
+@extend_schema(
+    summary="Заказы (mock)",
+    description="Демонстрация прав доступа к ресурсу 'orders' с разделением на свои/чужие",
+    parameters=[
+        {
+            "name": "own",
+            "in": "query",
+            "type": "boolean",
+            "description": "true — только свои заказы, false — все заказы",
+            "required": False,
+        }
+    ],
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "orders": {"type": "array"},
+            }
+        },
+        401: OpenApiResponse(description="Не авторизован"),
+        403: OpenApiResponse(description="Доступ запрещён"),
+    }
+)
 class MockOrdersView(APIView):
     """Вымышленный ресурс 'orders' для проверки прав с разделением на 'свои' и 'чужие'"""
     def get(self, request):

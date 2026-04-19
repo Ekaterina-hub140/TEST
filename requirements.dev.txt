@@ -1,4 +1,17 @@
 -r requirements.txt
+
+# Testing
 pytest-xdist==3.5.0
-black==23.12.1
+pytest-cov==4.1.0
+
+# Code formatting & linting
+black==24.2.0
 flake8==7.0.0
+isort==5.13.2
+mypy==1.8.0
+
+# Debugging
+django-debug-toolbar==4.2.0
+
+# Performance
+django-silk==5.1.0

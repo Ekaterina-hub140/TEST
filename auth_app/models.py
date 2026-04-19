@@ -83,3 +83,17 @@ class AccessRule(models.Model):
     
     class Meta:
         unique_together = ('role', 'resource')
+
+class RefreshToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='refresh_tokens')
+    token = models.CharField(max_length=255, unique=True)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_revoked = models.BooleanField(default=False)
+    
+    def is_expired(self):
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+    
+    def __str__(self):
+        return f"Refresh token for {self.user.email}"
