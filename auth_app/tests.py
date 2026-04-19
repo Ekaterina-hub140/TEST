@@ -33,7 +33,7 @@ class AuthTestCase(TestCase):
             'password': 'testpass123'
         })
         self.assertEqual(response.status_code, 200)
-        self.assertIn('token', response.json())
+        self.assertIn('access_token', response.json())
     
     def test_login_wrong_password(self):
         User.objects.create_user(email='test@test.com', password='testpass123')
