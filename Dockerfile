@@ -2,8 +2,8 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Alpine использует apk вместо apt-get
 RUN apk add --no-cache gcc musl-dev linux-headers
